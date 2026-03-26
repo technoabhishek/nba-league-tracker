@@ -281,7 +281,8 @@ export default function App() {
             <h1 className="text-7xl md:text-8xl font-black text-white italic uppercase tracking-tighter leading-[0.85] select-none">LEAGUE<br/><span className="text-transparent border-t-8 border-white inline-block mt-3">TRACKER</span></h1>
          </div>
          <div className="flex gap-3">
-            <button onClick={() => setResetModal(true)} className="p-5 glass-card border-white/5 text-slate-700 hover:text-red-500 transition-all"><RotateCcw/></button>
+            <button onClick={() => setIsAdminModalOpen(true)} className="p-5 glass-card border-white/5 text-slate-700 hover:text-neon-blue transition-all" title="Admin Control Center"><Lock/></button>
+            <button onClick={() => setResetModal(true)} className="p-5 glass-card border-white/5 text-slate-700 hover:text-red-500 transition-all" title="Reset Status"><RotateCcw/></button>
             <div className="glass-card p-5 border-white/5 flex items-center gap-8 bg-white/[0.02]">
                <div className="flex flex-col leading-none"><span className="text-4xl font-black text-white">{players.length}</span><span className="text-[9px] font-black text-slate-600 uppercase tracking-widest mt-1">Athletes</span></div>
                <BarChart3 className="w-6 h-6 text-neon-blue opacity-50"/>
@@ -511,15 +512,6 @@ export default function App() {
             <div>{matches.length} RECORDED</div>
          </div>
       </footer>
-      
-      {/* Floating Admin Button */}
-      <button 
-         onClick={() => setIsAdminModalOpen(true)} 
-         className="fixed bottom-6 right-6 z-[200] bg-slate-900 border border-white/10 text-slate-500 hover:text-neon-blue hover:border-neon-blue p-4 rounded-full shadow-2xl transition-all group"
-      >
-         <Lock className="w-5 h-5"/>
-         <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 bg-black text-white text-[10px] uppercase font-black px-3 py-1.5 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity">Command Tracker</span>
-      </button>
     </div>
   );
 }
