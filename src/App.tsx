@@ -26,7 +26,8 @@ import {
   MonitorPlay,
   PlayCircle,
   CircleStop,
-  Check
+  Check,
+  Lock
 } from 'lucide-react';
 import Cropper, { Area } from 'react-easy-crop';
 import imageCompression from 'browser-image-compression';
@@ -130,6 +131,9 @@ export default function App() {
      momentLink: '', showWebcam: false
   });
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
 
   // Lifecyle
   useEffect(() => {
@@ -460,7 +464,54 @@ export default function App() {
       <Modal isOpen={!!deleteId} onClose={() => setDeleteId(null)} title="Erase"><div className="text-center py-8 space-y-6"><AlertTriangle className="w-12 h-12 text-red-600 mx-auto animate-bounce"/><h4 className="text-2xl font-black text-white italic">Confirm Deletion?</h4><div className="flex gap-4"><button onClick={()=>setDeleteId(null)} className="flex-1 py-4 bg-white/5 border border-white/10 text-white font-black rounded-2xl">Abort</button><button onClick={async ()=>{await supabase.from('players').delete().eq('id',deleteId);setDeleteId(null);await fetchData();}} className="flex-1 py-4 bg-red-600 text-white font-black rounded-2xl">Authorise</button></div></div></Modal>
       <Modal isOpen={!!matchView} onClose={() => setMatchView(null)} title="Vault Playback" maxWidth="max-w-4xl">{matchView && <div className="space-y-8"><div className="rounded-3xl overflow-hidden border border-white/10 bg-black aspect-video relative">{matchView.momentVideoUrl ? <video src={matchView.momentVideoUrl} controls autoPlay className="w-full h-full object-cover" /> : <img src={matchView.momentPhotoUrl} className="w-full h-full object-cover" />}</div><div className="p-8 rounded-[32px] bg-white/[0.03] border border-white/5 text-center"><p className="text-3xl font-black text-white italic mb-6">"{matchView.momentCaption || "No highlight."}"</p><div className="flex justify-center gap-12"><div className="text-center"><p className="text-5xl font-black text-white italic">{matchView.scoreA}</p><p className="text-[9px] font-black text-slate-600 uppercase">Home</p></div><div className="text-5xl font-black text-slate-800">/</div><div className="text-center"><p className="text-5xl font-black text-white italic">{matchView.scoreB}</p><p className="text-[9px] font-black text-slate-600 uppercase">Away</p></div></div></div></div>}</Modal>
 
-      <footer className="mt-40 mb-20 pt-16 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-10 opacity-30 hover:opacity-100 transition-all duration-700"><div className="space-y-2 max-w-sm text-center md:text-left"><h5 className="text-white font-black uppercase text-sm">NBA LEAGUE TRACKER <span className="text-slate-800 ml-2">v4.4.0</span></h5><p className="text-[9px] uppercase font-black tracking-widest leading-loose text-slate-600">Enterprise High-Definition Satellite Capture Network. Distributed Node Synchronization.</p></div><div className="flex items-center gap-10 font-black uppercase text-[10px] tracking-widest text-slate-700"><div>{matches.length} RECORDED</div></div></footer>
+      <Modal isOpen={isAdminModalOpen} onClose={() => setIsAdminModalOpen(false)} title="ADMIN COMMAND CENTER" maxWidth="max-w-4xl">
+         {!isAdmin ? (
+            <div className="space-y-4 max-w-sm mx-auto py-10">
+               <Lock className="w-12 h-12 text-slate-500 mx-auto mb-6 opacity-30"/>
+               <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-white outline-none text-center italic font-black" placeholder="MASTER KEY" />
+               <button onClick={() => { if(adminPassword === 'admin123') setIsAdmin(true); else alert('Access Denied'); }} className="w-full py-4 bg-neon-blue text-black font-black uppercase rounded-2xl hover:bg-white transition-all">Authenticate</button>
+            </div>
+         ) : (
+            <div className="space-y-10">
+               <div className="space-y-4">
+                  <h4 className="text-xl font-black italic text-neon-blue uppercase">Match Registry</h4>
+                  {matches.length === 0 ? <p className="text-slate-600 italic text-sm">No matches found.</p> : matches.map(m => (
+                     <div key={m.id} className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/10 group">
+                        <div className="text-xs uppercase font-black text-slate-300">
+                           {players.find(p=>p.id===m.playerAId)?.name} vs {players.find(p=>p.id===m.playerBId)?.name} <span className="text-neon-blue ml-2">({m.scoreA}-{m.scoreB})</span>
+                        </div>
+                        <button onClick={async () => { await supabase.from('matches').delete().eq('id', m.id); await fetchData(); }} className="p-2 text-slate-500 hover:text-red-500 bg-black/40 rounded-lg opacity-50 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4"/></button>
+                     </div>
+                  ))}
+               </div>
+               <div className="space-y-4">
+                  <h4 className="text-xl font-black italic text-neon-purple uppercase">Athlete Stats Override</h4>
+                  {players.length === 0 ? <p className="text-slate-600 italic text-sm">No athletes enrolled.</p> : players.map(p => (
+                     <div key={p.id} className="flex flex-col gap-3 bg-white/5 p-5 rounded-2xl border border-white/10">
+                        <div className="flex justify-between items-center"><span className="font-black text-white italic text-lg">{p.name}</span><button onClick={async () => { await supabase.from('players').delete().eq('id', p.id); await fetchData(); }} className="text-red-500 text-[10px] bg-red-500/10 px-3 py-1 rounded-md uppercase font-black tracking-widest hover:bg-red-500 hover:text-white transition-all">Expel Athlete</button></div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                           <div><label className="text-[8px] uppercase tracking-widest text-slate-500 font-black mb-1 block">WINS</label><input type="number" defaultValue={p.wins} onBlur={async e => { await supabase.from('players').update({wins: parseInt(e.target.value)||0}).eq('id', p.id); await fetchData(); }} className="bg-black/60 text-sm font-black text-white p-3 rounded-xl border border-white/10 w-full focus:border-neon-purple outline-none" /></div>
+                           <div><label className="text-[8px] uppercase tracking-widest text-slate-500 font-black mb-1 block">PLAYED</label><input type="number" defaultValue={p.matchesPlayed} onBlur={async e => { await supabase.from('players').update({matches_played: parseInt(e.target.value)||0}).eq('id', p.id); await fetchData(); }} className="bg-black/60 text-sm font-black text-white p-3 rounded-xl border border-white/10 w-full focus:border-neon-purple outline-none" /></div>
+                           <div><label className="text-[8px] uppercase tracking-widest text-slate-500 font-black mb-1 block">PTS+</label><input type="number" defaultValue={p.pointsScored} onBlur={async e => { await supabase.from('players').update({points_scored: parseInt(e.target.value)||0}).eq('id', p.id); await fetchData(); }} className="bg-black/60 text-sm font-black text-white p-3 rounded-xl border border-white/10 w-full focus:border-neon-blue outline-none" /></div>
+                           <div><label className="text-[8px] uppercase tracking-widest text-slate-500 font-black mb-1 block">PTS-</label><input type="number" defaultValue={p.pointsAllowed} onBlur={async e => { await supabase.from('players').update({points_allowed: parseInt(e.target.value)||0}).eq('id', p.id); await fetchData(); }} className="bg-black/60 text-sm font-black text-white p-3 rounded-xl border border-white/10 w-full focus:border-neon-blue outline-none" /></div>
+                        </div>
+                     </div>
+                  ))}
+               </div>
+            </div>
+         )}
+      </Modal>
+
+      <footer className="mt-40 mb-20 pt-16 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-10 opacity-30 hover:opacity-100 transition-all duration-700">
+         <div className="space-y-2 max-w-sm text-center md:text-left">
+            <h5 className="text-white font-black uppercase text-sm">NBA LEAGUE TRACKER <span className="text-slate-800 ml-2">v4.5.0</span></h5>
+            <p className="text-[9px] uppercase font-black tracking-widest leading-loose text-slate-600">Enterprise High-Definition Satellite Capture Network. Distributed Node Synchronization.</p>
+         </div>
+         <div className="flex items-center gap-10 font-black uppercase text-[10px] tracking-widest text-slate-700">
+            <div>{matches.length} RECORDED</div>
+            <button onClick={() => setIsAdminModalOpen(true)} className="flex items-center gap-2 hover:text-white transition-colors"><Lock className="w-3 h-3"/> Admin</button>
+         </div>
+      </footer>
     </div>
   );
 }
