@@ -39,10 +39,11 @@ import { getCroppedImg } from './utils/imageProcessor';
 
 // --- Components ---
 
-const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg" }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode, maxWidth?: string }) => {
+const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-lg", zIndex = "z-[200]" }: { isOpen: boolean, onClose: () => void, title: string, children: React.ReactNode, maxWidth?: string, zIndex?: string }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl">
+    <div className={`fixed inset-0 ${zIndex} flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl`}>
+
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} className={`glass-card w-full ${maxWidth} overflow-hidden relative border-white/10 bg-slate-900 shadow-2xl`}>
         <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">
           <h3 className="text-xl font-black text-white uppercase tracking-tighter italic">{title}</h3>
@@ -282,7 +283,9 @@ export default function App() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 md:pt-16 md:pb-32">
       {/* Modal / Overlay UI */}
-      <Modal isOpen={!!editingPlayerId} onClose={() => setEditingPlayerId(null)} title={showCropper ? "Crop Photo" : "Profile Settings"} maxWidth={showCropper ? "max-w-2xl" : "max-w-lg"}>
+      {/* Edit Profile Modal (Highest Z-Index) */}
+      <Modal zIndex="z-[300]" isOpen={!!editingPlayerId} onClose={() => setEditingPlayerId(null)} title={showCropper ? "Crop Photo" : "Profile Settings"} maxWidth={showCropper ? "max-w-2xl" : "max-w-lg"}>
+
          {showCropper && editForm.rawImage ? <AvatarCropper image={editForm.rawImage} onComplete={async (b) => {
             const comp = await imageCompression(b as File, { maxSizeMB: 0.1 });
             const p = `avatars/${Date.now()}.jpg`; const { data } = await supabase.storage.from('nba-moments').upload(p, comp);
@@ -310,7 +313,8 @@ export default function App() {
       </Modal>
 
       {/* Enlist Modal */}
-      <Modal isOpen={showEnlistModal} onClose={() => setShowEnlistModal(false)} title={showEnlistCropper ? "Crop Photo" : (isAdmin ? "Direct Enrollment" : "Request League Entry")} maxWidth={showEnlistCropper ? "max-w-2xl" : "max-w-lg"}>
+      <Modal zIndex="z-[210]" isOpen={showEnlistModal} onClose={() => setShowEnlistModal(false)} title={showEnlistCropper ? "Crop Photo" : (isAdmin ? "Direct Enrollment" : "Request League Entry")} maxWidth={showEnlistCropper ? "max-w-2xl" : "max-w-lg"}>
+
          {showEnlistCropper && enlistForm.rawImage ? <AvatarCropper image={enlistForm.rawImage} onComplete={async (b) => {
             const comp = await imageCompression(b as File, { maxSizeMB: 0.1 });
             const p = `avatars/${Date.now()}.jpg`; const { data } = await supabase.storage.from('nba-moments').upload(p, comp);
@@ -409,10 +413,16 @@ export default function App() {
                                          <MonitorPlay className="w-10 h-10 text-slate-800 group-hover:text-neon-blue/60" /><p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Open Satellite</p>
                                       </div>
                                    ) : matchResult.momentSource === 'upload' ? (
-                                      <label className="w-full aspect-video border-2 border-dashed border-white/10 rounded-[32px] bg-white/[0.01] flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-neon-purple/30 transition-all group">
-                                         <UploadCloud className="w-10 h-10 text-slate-800 group-hover:text-neon-purple/60" /><p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Upload File</p>
-                                         <input type="file" className="hidden" onChange={async e => { const f = e.target.files?.[0]; if(f) setMatchResult({...matchResult, momentFile: f, momentPreview: URL.createObjectURL(f)}); }} />
-                                      </label>
+                                       <label className="w-full aspect-video border-2 border-dashed border-white/10 rounded-[32px] bg-white/[0.01] flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-neon-purple/30 transition-all group">
+                                          <UploadCloud className="w-10 h-10 text-slate-800 group-hover:text-neon-purple/60" /><p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Upload File</p>
+                                          <input type="file" className="hidden" onChange={async e => { 
+                                             const f = e.target.files?.[0]; 
+                                             if(f) {
+                                                const type = f.type.startsWith('video') ? 'video' : 'image';
+                                                setMatchResult({...matchResult, momentFile: f, momentPreview: URL.createObjectURL(f), mediaType: type});
+                                             }
+                                          }} />
+                                       </label>
                                    ) : (
                                       <input value={matchResult.momentLink} onChange={e => setMatchResult({...matchResult, momentLink: e.target.value})} className="w-full bg-black/40 border border-white/10 p-5 rounded-3xl text-white font-black" placeholder="Paste URL..." />
                                    )}
@@ -570,7 +580,10 @@ export default function App() {
                      if(next && next.length > 5) {
                         const { error } = await supabase.from('settings').upsert({ key: 'admin_master_key', value: next });
                         if(!error) alert("Admin Key updated! Remember the new key.");
-                        else alert("Update failed: " + error.message);
+                        else {
+                           console.error(error);
+                           alert("Update failed: " + error.message + "\nCheck SQL RLS Policies.");
+                        }
                      } else { alert("Key too short."); }
                   }} className="px-6 py-3 border border-white/10 rounded-xl text-[9px] font-black uppercase text-slate-400 hover:text-white hover:border-white/30 transition-all">Change Admin Key</button>
                </div>
