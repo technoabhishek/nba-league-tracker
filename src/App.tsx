@@ -470,7 +470,7 @@ export default function App() {
             <div className="space-y-4 max-w-sm mx-auto py-10">
                <Lock className="w-12 h-12 text-slate-500 mx-auto mb-6 opacity-30"/>
                <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-white outline-none text-center italic font-black" placeholder="MASTER KEY" />
-               <button onClick={() => { if(adminPassword === 'admin123') setIsAdmin(true); else alert('Access Denied'); }} className="w-full py-4 bg-neon-blue text-black font-black uppercase rounded-2xl hover:bg-white transition-all">Authenticate</button>
+               <button onClick={() => { if(adminPassword === 'Nba_123') setIsAdmin(true); else alert('Access Denied'); }} className="w-full py-4 bg-neon-blue text-black font-black uppercase rounded-2xl hover:bg-white transition-all">Authenticate</button>
             </div>
          ) : (
             <div className="space-y-10">
