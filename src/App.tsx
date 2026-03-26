@@ -558,18 +558,17 @@ export default function App() {
             <div className="space-y-4 max-w-sm mx-auto py-10">
                <Lock className="w-12 h-12 text-slate-500 mx-auto mb-6 opacity-30"/>
                <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-white outline-none text-center italic font-black" placeholder="MASTER KEY" />
-               <button onClick={async () => { 
-                  try {
-                    const { data, error } = await supabase.from('settings').select('value').eq('key', 'admin_master_key').single();
-                    const master = data?.value || 'Nba_123';
-                    if(adminPassword === master) setIsAdmin(true); 
-                    else alert('Access Denied'); 
-                  } catch(e) {
-                    // Fallback to default if table doesn't exist
-                    if(adminPassword === 'Nba_123') setIsAdmin(true);
-                    else alert('Access Denied (DB Table Error)');
-                  }
-               }} className="w-full py-4 bg-neon-blue text-black font-black uppercase rounded-2xl hover:bg-white transition-all">Authenticate</button>
+                <button onClick={async () => { 
+                   try {
+                     const { data, error } = await supabase.from('settings').select('value').eq('key', 'admin_master_key').single();
+                     const master = data?.value;
+                     if(adminPassword && adminPassword === master) setIsAdmin(true); 
+                     else alert('Access Denied'); 
+                   } catch(e) {
+                     // Database table missing error
+                     alert('Access Denied (Security Table Not Initialized)');
+                   }
+                }} className="w-full py-4 bg-neon-blue text-black font-black uppercase rounded-2xl hover:bg-white transition-all">Authenticate</button>
             </div>
          ) : (
             <div className="space-y-10">
