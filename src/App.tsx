@@ -178,7 +178,7 @@ export default function App() {
     setLoading(false);
   };
 
-  const finalizeMatch = async () => {
+   const finalizeMatch = async () => {
     if (!activeMatch) return;
     const sA = parseInt(matchResult.scoreA); const sB = parseInt(matchResult.scoreB);
     if (isNaN(sA) || isNaN(sB)) return alert("Valid scores required.");
@@ -186,34 +186,43 @@ export default function App() {
     let pUrl = matchResult.momentSource === 'link' ? matchResult.momentLink : null;
     let vUrl = null;
 
-    if (matchResult.momentFile) {
-       const ext = matchResult.mediaType === 'image' ? 'jpg' : 'webm';
-       const fUpl = matchResult.mediaType === 'image' ? await imageCompression(matchResult.momentFile as File, { maxSizeMB: 0.5 }) : matchResult.momentFile;
-       const path = `highlights/${Date.now()}.${ext}`;
-       const { data } = await supabase.storage.from('nba-moments').upload(path, fUpl);
-       if (data) {
+    try {
+      if (matchResult.momentFile) {
+        console.log("Starting upload...", matchResult.mediaType);
+        const ext = matchResult.mediaType === 'image' ? 'jpg' : 'webm';
+        const fUpl = matchResult.mediaType === 'image' ? await imageCompression(matchResult.momentFile as File, { maxSizeMB: 0.5 }) : matchResult.momentFile;
+        const path = `highlights/${Date.now()}.${ext}`;
+        const { data, error: uploadError } = await supabase.storage.from('nba-moments').upload(path, fUpl);
+        if (uploadError) throw uploadError;
+        if (data) {
           const url = supabase.storage.from('nba-moments').getPublicUrl(data.path).data.publicUrl;
           if (matchResult.mediaType === 'image') pUrl = url; else vUrl = url;
-       }
+          console.log("Upload success:", url);
+        }
+      }
+
+      const winnerId = sA > sB ? activeMatch[0].id : activeMatch[1].id;
+      const { error } = await supabase.from('matches').insert([{
+        player_a_id: activeMatch[0].id, player_b_id: activeMatch[1].id,
+        score_a: sA, score_b: sB, winner_id: winnerId,
+        moment_photo_url: pUrl, moment_video_url: vUrl, moment_caption: matchResult.caption.trim() || null
+      }]);
+
+      if (!error) {
+        const pA = activeMatch[0]; const pB = activeMatch[1];
+        await Promise.all([
+          supabase.from('players').update({ wins: pA.wins + (winnerId === pA.id ? 1 : 0), matches_played: pA.matchesPlayed+1, points_scored: pA.pointsScored + sA, points_allowed: pA.pointsAllowed + sB, status: 'idle' }).eq('id', pA.id),
+          supabase.from('players').update({ wins: pB.wins + (winnerId === pB.id ? 1 : 0), matches_played: pB.matchesPlayed+1, points_scored: pB.pointsScored + sB, points_allowed: pB.pointsAllowed + sA, status: 'idle' }).eq('id', pB.id)
+        ]);
+        setMatchResult({ scoreA: '', scoreB: '', caption: '', mediaType: 'image', momentSource: 'upload', momentFile: null, momentPreview: null, momentLink: '', showWebcam: false });
+        await fetchData();
+      } else { throw error; }
+    } catch (err: any) {
+      console.error("Sync Error:", err);
+      alert("Satellite Sync Interrupted: " + (err.message || "Network Error"));
+    } finally {
+      setIsFinalizing(false);
     }
-
-    const winnerId = sA > sB ? activeMatch[0].id : activeMatch[1].id;
-    const { error } = await supabase.from('matches').insert([{
-      player_a_id: activeMatch[0].id, player_b_id: activeMatch[1].id,
-      score_a: sA, score_b: sB, winner_id: winnerId,
-      moment_photo_url: pUrl, moment_video_url: vUrl, moment_caption: matchResult.caption.trim() || null
-    }]);
-
-    if (!error) {
-       const pA = activeMatch[0]; const pB = activeMatch[1];
-       await Promise.all([
-         supabase.from('players').update({ wins: pA.wins + (winnerId === pA.id ? 1 : 0), matches_played: pA.matchesPlayed+1, points_scored: pA.pointsScored + sA, points_allowed: pA.pointsAllowed + sB, status: 'idle' }).eq('id', pA.id),
-         supabase.from('players').update({ wins: pB.wins + (winnerId === pB.id ? 1 : 0), matches_played: pB.matchesPlayed+1, points_scored: pB.pointsScored + sB, points_allowed: pB.pointsAllowed + sA, status: 'idle' }).eq('id', pB.id)
-       ]);
-       setMatchResult({ scoreA: '', scoreB: '', caption: '', mediaType: 'image', momentSource: 'upload', momentFile: null, momentPreview: null, momentLink: '', showWebcam: false });
-       await fetchData();
-    } else { alert("Sync Error: Confirm moment_video_url column exists in matches table."); console.error(error); }
-    setIsFinalizing(false);
   };
 
   const signPlayer = async (e?: React.FormEvent) => {
@@ -540,10 +549,16 @@ export default function App() {
                <Lock className="w-12 h-12 text-slate-500 mx-auto mb-6 opacity-30"/>
                <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-white outline-none text-center italic font-black" placeholder="MASTER KEY" />
                <button onClick={async () => { 
-                  const { data } = await supabase.from('settings').select('value').eq('key', 'admin_master_key').single();
-                  const master = data?.value || 'Nba_123';
-                  if(adminPassword === master) setIsAdmin(true); 
-                  else alert('Access Denied'); 
+                  try {
+                    const { data, error } = await supabase.from('settings').select('value').eq('key', 'admin_master_key').single();
+                    const master = data?.value || 'Nba_123';
+                    if(adminPassword === master) setIsAdmin(true); 
+                    else alert('Access Denied'); 
+                  } catch(e) {
+                    // Fallback to default if table doesn't exist
+                    if(adminPassword === 'Nba_123') setIsAdmin(true);
+                    else alert('Access Denied (DB Table Error)');
+                  }
                }} className="w-full py-4 bg-neon-blue text-black font-black uppercase rounded-2xl hover:bg-white transition-all">Authenticate</button>
             </div>
          ) : (
