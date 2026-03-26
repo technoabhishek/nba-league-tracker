@@ -27,7 +27,8 @@ import {
   PlayCircle,
   CircleStop,
   Check,
-  Lock
+  Lock,
+  Plus
 } from 'lucide-react';
 import Cropper, { Area } from 'react-easy-crop';
 import imageCompression from 'browser-image-compression';
@@ -146,6 +147,10 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
 
+  const [enlistForm, setEnlistForm] = useState({ name: '', team: '', avatar: '', rawImage: null as string | null });
+  const [showEnlistModal, setShowEnlistModal] = useState(false);
+  const [showEnlistCropper, setShowEnlistCropper] = useState(false);
+
   // Lifecyle
   useEffect(() => {
     fetchData();
@@ -158,7 +163,7 @@ export default function App() {
   const fetchData = async () => {
     const { data: pData } = await supabase.from('players').select('*').order('wins', { ascending: false });
     if (pData) setPlayers(pData.map(p => ({
-      id: p.id, name: p.name, teamName: p.team_name, avatarUrl: p.avatar_url,
+      id: p.id, name: p.name, teamName: p.team_name, avatar_url: p.avatar_url,
       matchesPlayed: p.matches_played || 0, wins: p.wins || 0, pointsScored: p.points_scored || 0,
       pointsAllowed: p.points_allowed || 0, status: p.status as PlayerStatus, 
       joinedAt: new Date(p.created_at || Date.now()).getTime(), isApproved: !!p.is_approved
@@ -211,12 +216,26 @@ export default function App() {
     setIsFinalizing(false);
   };
 
-  const signPlayer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPlayerName.trim()) return;
-    const name = newPlayerName.trim();
-    setNewPlayerName('');
-    const { error } = await supabase.from('players').insert([{ name, team_name: null, avatar_url: null, status: 'idle', is_approved: isAdmin }]);
+  const signPlayer = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const { name, team, avatar } = enlistForm;
+    if (!name.trim()) return;
+    
+    const finalName = name.trim();
+    const finalTeam = team.trim() || null;
+    const finalAvatar = avatar || null;
+
+    setEnlistForm({ name: '', team: '', avatar: '', rawImage: null });
+    setShowEnlistModal(false);
+    
+    const { error } = await supabase.from('players').insert([{ 
+      name: finalName, 
+      team_name: finalTeam, 
+      avatar_url: finalAvatar, 
+      status: 'idle', 
+      is_approved: isAdmin 
+    }]);
+
     if (error) { alert("Error: " + error.message); console.error(error); }
     else {
       if(!isAdmin) alert("Request Sent! Awaiting league approval from admin.");
@@ -278,6 +297,37 @@ export default function App() {
                <input value={editForm.team} onChange={e => setEditForm({...editForm, team: e.target.value})} className="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-white font-black uppercase tracking-widest outline-none focus:border-neon-purple" placeholder="Team" />
             </div>
             <button onClick={async () => { await supabase.from('players').update({ name: editForm.name, team_name: editForm.team, avatar_url: editForm.avatar }).eq('id', editingPlayerId); setEditingPlayerId(null); await fetchData(); }} className="w-full py-4 bg-white text-black font-black uppercase text-[11px] rounded-2xl shadow-xl">Update</button>
+         </div>}
+      </Modal>
+
+      {/* Enlist Modal */}
+      <Modal isOpen={showEnlistModal} onClose={() => setShowEnlistModal(false)} title={showEnlistCropper ? "Crop Photo" : (isAdmin ? "Direct Enrollment" : "Request League Entry")} maxWidth={showEnlistCropper ? "max-w-2xl" : "max-w-lg"}>
+         {showEnlistCropper && enlistForm.rawImage ? <AvatarCropper image={enlistForm.rawImage} onComplete={async (b) => {
+            const comp = await imageCompression(b as File, { maxSizeMB: 0.1 });
+            const p = `avatars/${Date.now()}.jpg`; const { data } = await supabase.storage.from('nba-moments').upload(p, comp);
+            if (data) { const url = supabase.storage.from('nba-moments').getPublicUrl(data.path).data.publicUrl; setEnlistForm({...enlistForm, avatar: url, rawImage: null}); setShowEnlistCropper(false); }
+         }} onCancel={() => setShowEnlistCropper(false)} /> : <div className="space-y-6">
+            <div className="flex flex-col items-center gap-6 p-8 rounded-[40px] bg-white/[0.03] border border-white/5">
+               <div className="relative group">
+                  <div className="w-32 h-32 rounded-[48px] overflow-hidden border-4 border-white/10 shadow-2xl">
+                     {enlistForm.avatar ? <img src={enlistForm.avatar} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-slate-900 flex items-center justify-center font-black text-5xl text-slate-800 italic uppercase">?</div>}
+                  </div>
+                  <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-[48px]">
+                     <div className="flex flex-col items-center gap-2"><UploadCloud className="w-8 h-8 text-white"/><span className="text-[8px] font-black uppercase text-white tracking-widest">Upload DP</span></div>
+                     <input type="file" className="hidden" accept="image/*" onChange={e => {
+                        const f = e.target.files?.[0]; if(f) { const fr = new FileReader(); fr.readAsDataURL(f); fr.onload = () => { setEnlistForm({...enlistForm, rawImage: fr.result as string}); setShowEnlistCropper(true); }; }
+                     }} />
+                  </label>
+               </div>
+               <div className="text-center"><p className="text-[10px] font-black text-neon-blue uppercase tracking-[0.4em] mb-1">New Signature</p><h4 className="text-2xl font-black text-white italic uppercase tracking-tighter">Satellite Sync ID</h4></div>
+            </div>
+            <div className="space-y-4">
+               <div className="relative"><input value={enlistForm.name} onChange={e => setEnlistForm({...enlistForm, name: e.target.value})} className="w-full bg-black/40 border border-white/10 p-5 rounded-3xl text-white font-black italic outline-none focus:border-neon-blue text-lg" placeholder="Full Name" /><CheckCircle2 className={`absolute right-5 top-1/2 -translate-y-1/2 w-5 h-5 ${enlistForm.name.length>2?'text-green-500':'text-slate-800'}`}/></div>
+               <input value={enlistForm.team} onChange={e => setEnlistForm({...enlistForm, team: e.target.value})} className="w-full bg-black/40 border border-white/10 p-5 rounded-3xl text-white font-black uppercase tracking-widest outline-none focus:border-neon-purple" placeholder="Franchise / Team" />
+            </div>
+            <button onClick={() => signPlayer()} className={`w-full py-6 rounded-3xl font-black uppercase text-xs tracking-[0.2em] transition-all shadow-2xl border-b-[6px] active:border-b-0 active:translate-y-1 ${enlistForm.name.length>2?'bg-white text-black border-slate-300 hover:bg-neon-blue':'bg-slate-900 text-slate-700 border-black opacity-50 pointer-events-none'}`}>
+               {isAdmin ? "Finalize Enlistment" : "Sumbit Join Request"}
+            </button>
          </div>}
       </Modal>
 
@@ -373,10 +423,9 @@ export default function App() {
                    <section className="glass-card p-10 md:p-14 border-white/5 space-y-12">
                       <div className="flex flex-col md:flex-row justify-between gap-6">
                          <h3 className="text-5xl font-black text-white italic uppercase leading-none">THE DRAFT</h3>
-                         <form onSubmit={signPlayer} className="flex gap-4">
-                            <input value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} className="bg-black/60 border-2 border-white/5 rounded-2xl py-4 px-8 text-white font-black" placeholder="Join League..." />
-                            <button type="submit" className="bg-white text-black font-black px-8 rounded-2xl text-[10px] uppercase tracking-widest hover:bg-neon-blue transition-all">{isAdmin ? "Enroll" : "Request Join"}</button>
-                         </form>
+                         <button onClick={() => { setEnlistForm({name:'', team:'', avatar:'', rawImage:null}); setShowEnlistModal(true); }} className="bg-white text-black font-black px-10 py-5 rounded-3xl text-[10px] uppercase tracking-widest hover:bg-neon-blue transition-all shadow-2xl border-b-4 border-slate-300 active:border-b-0 active:translate-y-1 flex items-center gap-2">
+                             <Plus className="w-4 h-4"/> {isAdmin ? "Enrol Athlete" : "Request Entry"}
+                         </button>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                          {players.filter(p => p.isApproved).map(p => (
@@ -508,10 +557,7 @@ export default function App() {
                </div>
                <div className="p-8 rounded-[32px] bg-white/[0.03] border border-white/5">
                   <h4 className="text-sm font-black text-white uppercase italic tracking-widest mb-6">Direct Enlist Athlete</h4>
-                  <form onSubmit={signPlayer} className="flex flex-col sm:flex-row gap-4">
-                     <input value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} className="flex-1 bg-black/60 border border-white/10 p-4 rounded-2xl text-white outline-none font-black italic" placeholder="ATHLETE NAME..." />
-                     <button type="submit" className="bg-white text-black font-black px-10 py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-neon-blue transition-all">Sign Now</button>
-                  </form>
+                  <button onClick={() => { setEnlistForm({name:'', team:'', avatar:'', rawImage:null}); setShowEnlistModal(true); }} className="w-full py-4 bg-neon-blue text-black font-black rounded-2xl uppercase text-[10px] tracking-widest hover:bg-white transition-all shadow-xl">Launch Enrollment Terminal</button>
                </div>
                <div className="space-y-4">
                   <h4 className="text-xl font-black italic text-neon-blue uppercase">Match Registry</h4>
