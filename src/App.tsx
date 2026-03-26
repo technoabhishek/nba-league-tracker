@@ -163,7 +163,7 @@ export default function App() {
   const fetchData = async () => {
     const { data: pData } = await supabase.from('players').select('*').order('wins', { ascending: false });
     if (pData) setPlayers(pData.map(p => ({
-      id: p.id, name: p.name, teamName: p.team_name, avatar_url: p.avatar_url,
+      id: p.id, name: p.name, teamName: p.team_name, avatarUrl: p.avatar_url,
       matchesPlayed: p.matches_played || 0, wins: p.wins || 0, pointsScored: p.points_scored || 0,
       pointsAllowed: p.points_allowed || 0, status: p.status as PlayerStatus, 
       joinedAt: new Date(p.created_at || Date.now()).getTime(), isApproved: !!p.is_approved
@@ -539,10 +539,26 @@ export default function App() {
             <div className="space-y-4 max-w-sm mx-auto py-10">
                <Lock className="w-12 h-12 text-slate-500 mx-auto mb-6 opacity-30"/>
                <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="w-full bg-black/40 border border-white/10 p-4 rounded-2xl text-white outline-none text-center italic font-black" placeholder="MASTER KEY" />
-               <button onClick={() => { if(adminPassword === 'Nba_123') setIsAdmin(true); else alert('Access Denied'); }} className="w-full py-4 bg-neon-blue text-black font-black uppercase rounded-2xl hover:bg-white transition-all">Authenticate</button>
+               <button onClick={async () => { 
+                  const { data } = await supabase.from('settings').select('value').eq('key', 'admin_master_key').single();
+                  const master = data?.value || 'Nba_123';
+                  if(adminPassword === master) setIsAdmin(true); 
+                  else alert('Access Denied'); 
+               }} className="w-full py-4 bg-neon-blue text-black font-black uppercase rounded-2xl hover:bg-white transition-all">Authenticate</button>
             </div>
          ) : (
             <div className="space-y-10">
+               <div className="p-8 rounded-[32px] bg-white/[0.03] border border-white/5 flex flex-col md:flex-row items-center justify-between gap-6">
+                  <div className="flex items-center gap-4"><Lock className="w-6 h-6 text-slate-600"/><h4 className="text-sm font-black text-white uppercase italic tracking-widest leading-none">Account Security</h4></div>
+                  <button onClick={async () => {
+                     const next = prompt("Enter New Master Key:");
+                     if(next && next.length > 5) {
+                        const { error } = await supabase.from('settings').upsert({ key: 'admin_master_key', value: next });
+                        if(!error) alert("Admin Key updated! Remember the new key.");
+                        else alert("Update failed: " + error.message);
+                     } else { alert("Key too short."); }
+                  }} className="px-6 py-3 border border-white/10 rounded-xl text-[9px] font-black uppercase text-slate-400 hover:text-white hover:border-white/30 transition-all">Change Admin Key</button>
+               </div>
                <div className="space-y-4">
                   <h4 className="text-xl font-black italic text-neon-blue uppercase">Pending Requests ({players.filter(p=>!p.isApproved).length})</h4>
                   {players.filter(p=>!p.isApproved).length === 0 ? <p className="text-slate-600 italic text-sm">No pending join requests.</p> : players.filter(p=>!p.isApproved).map(p => (
@@ -574,7 +590,16 @@ export default function App() {
                   <h4 className="text-xl font-black italic text-neon-purple uppercase">Athlete Stats Override</h4>
                   {players.length === 0 ? <p className="text-slate-600 italic text-sm">No athletes enrolled.</p> : players.filter(p=>p.isApproved).map(p => (
                      <div key={p.id} className="flex flex-col gap-3 bg-white/5 p-5 rounded-2xl border border-white/10">
-                        <div className="flex justify-between items-center"><span className="font-black text-white italic text-lg">{p.name}</span><button onClick={async () => { await supabase.from('players').delete().eq('id', p.id); await fetchData(); }} className="text-red-500 text-[10px] bg-red-500/10 px-3 py-1 rounded-md uppercase font-black tracking-widest hover:bg-red-500 hover:text-white transition-all">Expel Athlete</button></div>
+                        <div className="flex justify-between items-center">
+                           <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 shrink-0 bg-slate-900">{p.avatarUrl ? <img src={p.avatarUrl} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center font-black text-slate-700">{p.name[0]}</div>}</div>
+                              <span className="font-black text-white italic text-lg">{p.name}</span>
+                           </div>
+                           <div className="flex gap-2">
+                              <button onClick={() => startAvatarEdit(p)} className="text-[10px] bg-white/5 border border-white/10 text-white px-3 py-1 rounded-md uppercase font-black tracking-widest hover:bg-white hover:text-black transition-all">Edit Profile</button>
+                              <button onClick={async () => { await supabase.from('players').delete().eq('id', p.id); await fetchData(); }} className="text-red-500 text-[10px] bg-red-500/10 px-3 py-1 rounded-md uppercase font-black tracking-widest hover:bg-red-500 hover:text-white transition-all">Expel Athlete</button>
+                           </div>
+                        </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                            <div><label className="text-[8px] uppercase tracking-widest text-slate-500 font-black mb-1 block">WINS</label><input type="number" defaultValue={p.wins} onBlur={async e => { await supabase.from('players').update({wins: parseInt(e.target.value)||0}).eq('id', p.id); await fetchData(); }} className="bg-black/60 text-sm font-black text-white p-3 rounded-xl border border-white/10 w-full focus:border-neon-purple outline-none" /></div>
                            <div><label className="text-[8px] uppercase tracking-widest text-slate-500 font-black mb-1 block">PLAYED</label><input type="number" defaultValue={p.matchesPlayed} onBlur={async e => { await supabase.from('players').update({matches_played: parseInt(e.target.value)||0}).eq('id', p.id); await fetchData(); }} className="bg-black/60 text-sm font-black text-white p-3 rounded-xl border border-white/10 w-full focus:border-neon-purple outline-none" /></div>
