@@ -11,6 +11,7 @@ export interface Player {
   pointsAllowed: number;
   status: PlayerStatus;
   joinedAt: number;
+  isApproved: boolean;
 }
 
 export interface Match {

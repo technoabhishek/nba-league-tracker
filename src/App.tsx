@@ -107,6 +107,17 @@ const SatelliteCamera = ({ onCapture, type = 'image', onCancel }: { onCapture: (
   );
 };
 
+const AvatarCropper = ({ image, onComplete, onCancel }: { image: string, onComplete: (blob: Blob) => void, onCancel: () => void }) => {
+  const [crop, setCrop] = useState({ x: 0, y: 0 }); const [zoom, setZoom] = useState(1); const [px, setPx] = useState<Area | null>(null);
+  return (
+    <div className="space-y-6">
+      <div className="relative w-full h-80 bg-black rounded-3xl overflow-hidden shadow-inner"><Cropper image={image} crop={crop} zoom={zoom} aspect={1} onCropChange={setCrop} onZoomChange={setZoom} onCropComplete={(_, p) => setPx(p)} cropShape="round"/></div>
+      <div className="flex items-center gap-4 px-2"><span className="text-[10px] font-black text-slate-500 uppercase">Zoom</span><input type="range" min={1} max={3} step={0.1} value={zoom} onChange={e => setZoom(Number(e.target.value))} className="flex-1 accent-neon-blue" /></div>
+      <div className="flex gap-4"><button onClick={onCancel} className="flex-1 py-4 border border-white/10 rounded-2xl text-white font-black uppercase text-[10px]">Cancel</button><button onClick={async () => { if(px) onComplete(await getCroppedImg(image, px)); }} className="flex-1 py-4 bg-neon-blue text-black font-black uppercase text-[10px] rounded-2xl">Crop</button></div>
+    </div>
+  );
+};
+
 // --- App ---
 
 export default function App() {
@@ -149,7 +160,8 @@ export default function App() {
     if (pData) setPlayers(pData.map(p => ({
       id: p.id, name: p.name, teamName: p.team_name, avatarUrl: p.avatar_url,
       matchesPlayed: p.matches_played || 0, wins: p.wins || 0, pointsScored: p.points_scored || 0,
-      pointsAllowed: p.points_allowed || 0, status: p.status as PlayerStatus, joinedAt: new Date(p.created_at || Date.now()).getTime()
+      pointsAllowed: p.points_allowed || 0, status: p.status as PlayerStatus, 
+      joinedAt: new Date(p.created_at || Date.now()).getTime(), isApproved: !!p.is_approved
     })));
     const { data: mData } = await supabase.from('matches').select('*').order('created_at', { ascending: false });
     if (mData) setMatches(mData.map(m => ({
@@ -181,7 +193,6 @@ export default function App() {
     }
 
     const winnerId = sA > sB ? activeMatch[0].id : activeMatch[1].id;
-    // Attempting insert with a fix for the 400 error (column mapping check)
     const { error } = await supabase.from('matches').insert([{
       player_a_id: activeMatch[0].id, player_b_id: activeMatch[1].id,
       score_a: sA, score_b: sB, winner_id: winnerId,
@@ -205,9 +216,12 @@ export default function App() {
     if (!newPlayerName.trim()) return;
     const name = newPlayerName.trim();
     setNewPlayerName('');
-    const { error } = await supabase.from('players').insert([{ name, team_name: null, avatar_url: null, status: 'waiting' }]);
-    if (error) { alert("Error adding player: " + error.message); console.error(error); }
-    else await fetchData();
+    const { error } = await supabase.from('players').insert([{ name, team_name: null, avatar_url: null, status: 'idle', is_approved: isAdmin }]);
+    if (error) { alert("Error: " + error.message); console.error(error); }
+    else {
+      if(!isAdmin) alert("Request Sent! Awaiting league approval from admin.");
+      await fetchData();
+    }
   };
 
   const toggleStatus = async (id: string, currentStatus: string) => {
@@ -221,9 +235,9 @@ export default function App() {
     setEditForm({ name: p.name, team: p.teamName || '', avatar: p.avatarUrl || '', rawImage: null });
   };
 
-  const leaderboard = useMemo(() => [...players].sort((a,b) => b.wins - a.wins || (b.pointsScored-b.pointsAllowed) - (a.pointsScored-a.pointsAllowed)), [players]);
+  const leaderboard = useMemo(() => [...players].filter(p => p.isApproved).sort((a,b) => b.wins - a.wins || (b.pointsScored-b.pointsAllowed) - (a.pointsScored-a.pointsAllowed)), [players]);
   const activeMatch = useMemo(() => {
-    const q = players.filter(p => p.status === 'waiting').sort((a,b) => a.matchesPlayed - b.matchesPlayed || a.joinedAt - b.joinedAt);
+    const q = players.filter(p => p.isApproved && p.status === 'waiting').sort((a,b) => a.matchesPlayed - b.matchesPlayed || a.joinedAt - b.joinedAt);
     return q.length >= 2 ? [q[0], q[1]] : null;
   }, [players]);
 
@@ -359,10 +373,13 @@ export default function App() {
                    <section className="glass-card p-10 md:p-14 border-white/5 space-y-12">
                       <div className="flex flex-col md:flex-row justify-between gap-6">
                          <h3 className="text-5xl font-black text-white italic uppercase leading-none">THE DRAFT</h3>
-                         <form onSubmit={signPlayer} className="flex gap-4"><input value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} className="bg-black/60 border-2 border-white/5 rounded-2xl py-4 px-8 text-white font-black" placeholder="Enlist Athlete..." /><button type="submit" className="bg-white text-black font-black px-8 rounded-2xl text-[10px] uppercase tracking-widest">Enroll</button></form>
+                         <form onSubmit={signPlayer} className="flex gap-4">
+                            <input value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} className="bg-black/60 border-2 border-white/5 rounded-2xl py-4 px-8 text-white font-black" placeholder="Join League..." />
+                            <button type="submit" className="bg-white text-black font-black px-8 rounded-2xl text-[10px] uppercase tracking-widest hover:bg-neon-blue transition-all">{isAdmin ? "Enroll" : "Request Join"}</button>
+                         </form>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                         {players.map(p => (
+                         {players.filter(p => p.isApproved).map(p => (
                             <div key={p.id} className="p-6 md:p-8 rounded-[40px] bg-white/[0.02] border border-white/10 flex items-center justify-between group overflow-hidden shadow-xl">
                                <div className="flex items-center gap-6 relative z-10 w-full overflow-hidden">
                                   <div className="w-16 h-16 rounded-3xl overflow-hidden border border-white/10 shrink-0">{p.avatarUrl ? <img src={p.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-900 flex items-center justify-center text-2xl font-black text-slate-800">{p.name[0]}</div>}</div>
@@ -372,13 +389,16 @@ export default function App() {
                                   </div>
                                </div>
                                <div className="flex flex-col items-center gap-3 relative z-10 ml-4">
-                                  <button onClick={() => toggleStatus(p.id, p.status)} className={`px-5 py-2.5 rounded-[16px] text-[10px] font-black uppercase transition-all flex items-center gap-2 ${p.status === 'waiting' ? 'bg-green-600 text-white shadow-xl' : 'bg-slate-800 text-slate-500 hover:text-white'}`}>
-                                     {p.status === 'waiting' && <Check className="w-3.5 h-3.5" />} {p.status === 'waiting' ? "IN" : "OFF"}
-                                  </button>
-                                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                     <button onClick={() => startAvatarEdit(p)} className="p-2 border border-white/10 rounded-lg text-slate-600 hover:text-white"><Edit2 className="w-4 h-4"/></button>
-                                     <button onClick={() => setDeleteId(p.id)} className="p-2 border border-white/10 rounded-lg text-slate-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
-                                  </div>
+                                  {isAdmin ? (
+                                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => startAvatarEdit(p)} className="p-2 border border-white/10 rounded-lg text-slate-600 hover:text-white"><Edit2 className="w-4 h-4"/></button>
+                                        <button onClick={() => setDeleteId(p.id)} className="p-2 border border-white/10 rounded-lg text-slate-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                                     </div>
+                                  ) : (
+                                     <button onClick={() => toggleStatus(p.id, p.status)} className={`px-5 py-2.5 rounded-[16px] text-[10px] font-black uppercase transition-all flex items-center gap-2 ${p.status === 'waiting' ? 'bg-green-600 text-white shadow-xl' : 'bg-slate-800 text-slate-500 hover:text-white'}`}>
+                                        {p.status === 'waiting' && <Check className="w-3.5 h-3.5" />} {p.status === 'waiting' ? "IN" : "OFF"}
+                                     </button>
+                                  )}
                                </div>
                             </div>
                          ))}
@@ -475,6 +495,25 @@ export default function App() {
          ) : (
             <div className="space-y-10">
                <div className="space-y-4">
+                  <h4 className="text-xl font-black italic text-neon-blue uppercase">Pending Requests ({players.filter(p=>!p.isApproved).length})</h4>
+                  {players.filter(p=>!p.isApproved).length === 0 ? <p className="text-slate-600 italic text-sm">No pending join requests.</p> : players.filter(p=>!p.isApproved).map(p => (
+                     <div key={p.id} className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/10">
+                        <span className="font-black text-white italic">{p.name}</span>
+                        <div className="flex gap-2">
+                           <button onClick={async () => { await supabase.from('players').update({is_approved: true}).eq('id', p.id); await fetchData(); }} className="px-4 py-2 bg-neon-blue text-black font-black uppercase text-[10px] rounded-lg">Approve</button>
+                           <button onClick={async () => { await supabase.from('players').delete().eq('id', p.id); await fetchData(); }} className="p-2 bg-red-500/10 text-red-500 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                        </div>
+                     </div>
+                  ))}
+               </div>
+               <div className="p-8 rounded-[32px] bg-white/[0.03] border border-white/5">
+                  <h4 className="text-sm font-black text-white uppercase italic tracking-widest mb-6">Direct Enlist Athlete</h4>
+                  <form onSubmit={signPlayer} className="flex flex-col sm:flex-row gap-4">
+                     <input value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} className="flex-1 bg-black/60 border border-white/10 p-4 rounded-2xl text-white outline-none font-black italic" placeholder="ATHLETE NAME..." />
+                     <button type="submit" className="bg-white text-black font-black px-10 py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-neon-blue transition-all">Sign Now</button>
+                  </form>
+               </div>
+               <div className="space-y-4">
                   <h4 className="text-xl font-black italic text-neon-blue uppercase">Match Registry</h4>
                   {matches.length === 0 ? <p className="text-slate-600 italic text-sm">No matches found.</p> : matches.map(m => (
                      <div key={m.id} className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/10 group">
@@ -487,7 +526,7 @@ export default function App() {
                </div>
                <div className="space-y-4">
                   <h4 className="text-xl font-black italic text-neon-purple uppercase">Athlete Stats Override</h4>
-                  {players.length === 0 ? <p className="text-slate-600 italic text-sm">No athletes enrolled.</p> : players.map(p => (
+                  {players.length === 0 ? <p className="text-slate-600 italic text-sm">No athletes enrolled.</p> : players.filter(p=>p.isApproved).map(p => (
                      <div key={p.id} className="flex flex-col gap-3 bg-white/5 p-5 rounded-2xl border border-white/10">
                         <div className="flex justify-between items-center"><span className="font-black text-white italic text-lg">{p.name}</span><button onClick={async () => { await supabase.from('players').delete().eq('id', p.id); await fetchData(); }} className="text-red-500 text-[10px] bg-red-500/10 px-3 py-1 rounded-md uppercase font-black tracking-widest hover:bg-red-500 hover:text-white transition-all">Expel Athlete</button></div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -515,14 +554,3 @@ export default function App() {
     </div>
   );
 }
-
-const AvatarCropper = ({ image, onComplete, onCancel }: { image: string, onComplete: (blob: Blob) => void, onCancel: () => void }) => {
-  const [crop, setCrop] = useState({ x: 0, y: 0 }); const [zoom, setZoom] = useState(1); const [px, setPx] = useState<Area | null>(null);
-  return (
-    <div className="space-y-6">
-      <div className="relative w-full h-80 bg-black rounded-3xl overflow-hidden shadow-inner"><Cropper image={image} crop={crop} zoom={zoom} aspect={1} onCropChange={setCrop} onZoomChange={setZoom} onCropComplete={(_, p) => setPx(p)} cropShape="round"/></div>
-      <div className="flex items-center gap-4 px-2"><span className="text-[10px] font-black text-slate-500 uppercase">Zoom</span><input type="range" min={1} max={3} step={0.1} value={zoom} onChange={e => setZoom(Number(e.target.value))} className="flex-1 accent-neon-blue" /></div>
-      <div className="flex gap-4"><button onClick={onCancel} className="flex-1 py-4 border border-white/10 rounded-2xl text-white font-black uppercase text-[10px]">Cancel</button><button onClick={async () => { if(px) onComplete(await getCroppedImg(image, px)); }} className="flex-1 py-4 bg-neon-blue text-black font-black uppercase text-[10px] rounded-2xl">Crop</button></div>
-    </div>
-  );
-};
