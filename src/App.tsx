@@ -326,7 +326,7 @@ export default function App() {
                <input value={enlistForm.team} onChange={e => setEnlistForm({...enlistForm, team: e.target.value})} className="w-full bg-black/40 border border-white/10 p-5 rounded-3xl text-white font-black uppercase tracking-widest outline-none focus:border-neon-purple" placeholder="Franchise / Team" />
             </div>
             <button onClick={() => signPlayer()} className={`w-full py-6 rounded-3xl font-black uppercase text-xs tracking-[0.2em] transition-all shadow-2xl border-b-[6px] active:border-b-0 active:translate-y-1 ${enlistForm.name.length>2?'bg-white text-black border-slate-300 hover:bg-neon-blue':'bg-slate-900 text-slate-700 border-black opacity-50 pointer-events-none'}`}>
-               {isAdmin ? "Finalize Enlistment" : "Sumbit Join Request"}
+               {isAdmin ? "Finalize Enlistment" : "Submit Join Request"}
             </button>
          </div>}
       </Modal>
