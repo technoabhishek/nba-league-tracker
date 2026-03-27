@@ -510,12 +510,19 @@ export default function App() {
                         <table className="w-full min-w-[300px]">
                            <thead>
                               <tr className="text-[9px] sm:text-[10px] font-black text-slate-700 uppercase bg-black/40 border-b border-white/10">
-                                 <th className="px-3 sm:px-6 py-4 text-left italic">TEAM</th>
+                                 <th className="px-3 sm:px-6 py-4 text-left italic sticky left-0 bg-slate-900 z-20 min-w-[140px] shadow-[4px_0_12px_rgba(0,0,0,0.5)]">TEAM</th>
                                  <th className="px-2 py-4 text-center italic hidden sm:table-cell">W</th>
                                  <th className="px-2 py-4 text-center italic hidden sm:table-cell">L</th>
                                  <th className="px-2 py-4 text-center italic">PCT</th>
-                                 <th className="px-2 py-4 text-center italic">HOME</th>
-                                 <th className="px-2 py-4 text-center italic">AWAY</th>
+                                 <th className="px-2 py-4 text-center italic" title="Home Record">HOME</th>
+                                 <th className="px-2 py-4 text-center italic text-blue-500/50" title="Home Points For">H-PF</th>
+                                 <th className="px-2 py-4 text-center italic text-red-500/50" title="Home Points Against">H-PA</th>
+                                 <th className="px-2 py-4 text-center italic" title="Away Record">AWAY</th>
+                                 <th className="px-2 py-4 text-center italic text-blue-500/50" title="Away Points For">A-PF</th>
+                                 <th className="px-2 py-4 text-center italic text-red-500/50" title="Away Points Against">A-PA</th>
+                                 <th className="px-2 py-4 text-center italic text-green-500/50" title="Total Points For">PF</th>
+                                 <th className="px-2 py-4 text-center italic text-red-500/50" title="Total Points Against">PA</th>
+                                 <th className="px-2 py-4 text-center italic text-yellow-500/50" title="Net Point Differential">DIFF</th>
                                  <th className="px-3 sm:px-4 py-4 text-right italic">STRK</th>
                               </tr>
                            </thead>
@@ -526,11 +533,16 @@ export default function App() {
                                  const hl = pm.filter(m => m.playerAId === p.id && m.winnerId !== p.id).length;
                                  const aw = pm.filter(m => m.playerBId === p.id && m.winnerId === p.id).length;
                                  const al = pm.filter(m => m.playerBId === p.id && m.winnerId !== p.id).length;
+                                 const hpf = pm.filter(m => m.playerAId === p.id).reduce((acc, m) => acc + m.scoreA, 0);
+                                 const hpa = pm.filter(m => m.playerAId === p.id).reduce((acc, m) => acc + m.scoreB, 0);
+                                 const apf = pm.filter(m => m.playerBId === p.id).reduce((acc, m) => acc + m.scoreB, 0);
+                                 const apa = pm.filter(m => m.playerBId === p.id).reduce((acc, m) => acc + m.scoreA, 0);
+                                 const diff = p.pointsScored - p.pointsAllowed;
                                  const pct = p.matchesPlayed > 0 ? (p.wins / p.matchesPlayed).toFixed(3).replace(/^0\./, '.') : '.000';
                                  const strk = streaks[p.id] || '-';
                                  return (
                                   <tr key={p.id} className="border-b border-white/[0.02] hover:bg-white/[0.04] transition-all group">
-                                     <td className="px-3 sm:px-6 py-4 sm:py-6 flex items-center gap-2 sm:gap-4 overflow-hidden">
+                                     <td className="px-3 sm:px-6 py-4 sm:py-6 flex items-center gap-2 sm:gap-4 overflow-hidden sticky left-0 bg-slate-900/95 backdrop-blur-md z-10 shadow-[4px_0_12px_rgba(0,0,0,0.5)]">
                                         <span className="text-slate-700 font-black italic text-[10px] sm:text-[12px] w-4">#{i+1}</span>
                                         <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden bg-slate-950 border border-white/10 shrink-0">{p.avatarUrl ? <img src={p.avatarUrl} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-slate-900 flex items-center justify-center text-sm font-black text-slate-800">{p.name[0]}</div>}</div>
                                         <div className="flex flex-col min-w-0 flex-1">
@@ -541,8 +553,15 @@ export default function App() {
                                      <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-white italic hidden sm:table-cell">{p.wins}</td>
                                      <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-slate-500 italic hidden sm:table-cell">{p.matchesPlayed-p.wins}</td>
                                      <td className="px-2 py-4 sm:py-6 text-center text-[11px] sm:text-[13px] font-black text-white italic">{pct}</td>
-                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-slate-400 italic">{hw}-{hl}</td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-slate-400 italic bg-white/[0.01]">{hw}-{hl}</td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-blue-500/80 italic bg-white/[0.01]">{hpf}</td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-red-500/80 italic bg-white/[0.01]">{hpa}</td>
                                      <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-slate-400 italic">{aw}-{al}</td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-blue-500/80 italic">{apf}</td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-red-500/80 italic">{apa}</td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-green-500/80 italic bg-white/[0.01]">{p.pointsScored}</td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-red-500/80 italic bg-white/[0.01]">{p.pointsAllowed}</td>
+                                     <td className={`px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black italic bg-white/[0.01] ${diff > 0 ? 'text-green-500' : diff < 0 ? 'text-red-500' : 'text-slate-500'}`}>{diff > 0 ? '+' : ''}{diff}</td>
                                      <td className={`px-3 sm:px-4 py-4 sm:py-6 text-right text-[10px] sm:text-[12px] font-black italic ${strk.startsWith('W')?'text-green-500':'text-red-500'}`}>{strk}</td>
                                   </tr>
                                  );
