@@ -147,6 +147,7 @@ export default function App() {
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
+  const [forceHomeId, setForceHomeId] = useState<string|null>(null);
 
   const [enlistForm, setEnlistForm] = useState({ name: '', team: '', avatar: '', rawImage: null as string | null });
   const [showEnlistModal, setShowEnlistModal] = useState(false);
@@ -211,6 +212,7 @@ export default function App() {
       }]);
 
       if (!error) {
+        setForceHomeId(null);
         const pA = activeMatch[0]; const pB = activeMatch[1];
         await Promise.all([
           supabase.from('players').update({ wins: pA.wins + (winnerId === pA.id ? 1 : 0), matches_played: pA.matchesPlayed+1, home_games_played: pA.homeGamesPlayed+1, points_scored: pA.pointsScored + sA, points_allowed: pA.pointsAllowed + sB, status: 'idle' }).eq('id', pA.id),
@@ -270,15 +272,25 @@ export default function App() {
     const q = players.filter(p => p.isApproved && p.status === 'waiting').sort((a,b) => a.matchesPlayed - b.matchesPlayed || a.joinedAt - b.joinedAt);
     if (q.length >= 2) {
       const p1 = q[0], p2 = q[1];
+      if (forceHomeId === p2.id) return [p2, p1];
+      if (forceHomeId === p1.id) return [p1, p2];
       if (p1.homeGamesPlayed < p2.homeGamesPlayed) return [p1, p2];
       if (p2.homeGamesPlayed < p1.homeGamesPlayed) return [p2, p1];
-      return Math.random() > 0.5 ? [p1, p2] : [p2, p1];
+      return p1.id > p2.id ? [p1, p2] : [p2, p1];
     }
     return null;
-  }, [players]);
+  }, [players, forceHomeId]);
 
-  const winStreaks = useMemo(() => {
-    const s: any = {}; players.forEach(p => { let c = 0; let pm = matches.filter(m => m.playerAId === p.id || m.playerBId === p.id); for(let m of pm) { if(m.winnerId === p.id) c++; else break; } s[p.id] = c; });
+  const streaks = useMemo(() => {
+    const s: any = {};
+    players.forEach(p => {
+       const pm = matches.filter(m => m.playerAId === p.id || m.playerBId === p.id).sort((a,b)=>b.timestamp-a.timestamp);
+       if (pm.length === 0) { s[p.id] = '-'; return; }
+       const isWin = pm[0].winnerId === p.id;
+       let c = 0;
+       for(let m of pm) { if ((m.winnerId === p.id) === isWin) c++; else break; }
+       s[p.id] = `${isWin ? 'W' : 'L'}${c}`;
+    });
     return s;
   }, [players, matches]);
 
@@ -390,7 +402,7 @@ export default function App() {
                                          <div className={`w-40 md:w-56 aspect-square rounded-[32px] overflow-hidden border-2 shadow-2xl group-hover:scale-105 transition-all ${i===0?'border-neon-blue/30':'border-neon-purple/30'}`}>
                                             {activeMatch![i].avatarUrl ? <img src={activeMatch![i].avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-900 flex items-center justify-center text-6xl font-black text-slate-800 italic uppercase">{activeMatch![i].name[0]}</div>}
                                          </div>
-                                         {winStreaks[activeMatch![i].id] >= 3 && <div className="absolute -top-4 -right-4 bg-yellow-500 text-black px-4 py-1 rounded-xl text-[10px] font-black shadow-2xl skew-x-12 border-2 border-black">ON FIRE</div>}
+                                         {streaks[activeMatch![i].id]?.startsWith('W') && parseInt(streaks[activeMatch![i].id].substring(1)) >= 3 && <div className="absolute -top-4 -right-4 bg-yellow-500 text-black px-4 py-1 rounded-xl text-[10px] font-black shadow-2xl skew-x-12 border-2 border-black">ON FIRE</div>}
                                       </div>
                                       <div className="space-y-1 text-center w-full px-4"><h3 className="text-4xl font-black text-white uppercase italic tracking-tighter truncate leading-tight">{activeMatch![i].name}</h3>
                                         <div className="flex justify-center items-center gap-2">
@@ -402,6 +414,9 @@ export default function App() {
                                    </div>
                                 ))}
                                 <div className="text-7xl md:text-9xl font-black text-slate-900 italic opacity-10 pointer-events-none select-none scale-y-110 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 md:block hidden">VS</div>
+                                <button onClick={() => setForceHomeId(activeMatch![1].id)} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 bg-black/80 hover:bg-white border text-white hover:text-black hover:border-white border-white/20 p-4 rounded-full transition-all shadow-2xl" title="Swap Home/Away">
+                                   <RefreshCw className="w-5 h-5"/>
+                                </button>
                              </div>
                              <div className="p-8 md:p-12 rounded-[40px] bg-black/40 border-2 border-white/5 space-y-10">
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -493,26 +508,43 @@ export default function App() {
                         <table className="w-full min-w-[300px]">
                            <thead>
                               <tr className="text-[9px] sm:text-[10px] font-black text-slate-700 uppercase bg-black/40 border-b border-white/10">
-                                 <th className="px-3 sm:px-6 py-4 text-left italic w-[60%]">ATHLETE</th>
-                                 <th className="px-2 sm:px-4 py-4 text-center italic">W-L</th>
-                                 <th className="px-3 sm:px-6 py-4 text-right italic">PD</th>
+                                 <th className="px-3 sm:px-6 py-4 text-left italic">TEAM</th>
+                                 <th className="px-2 py-4 text-center italic hidden sm:table-cell">W</th>
+                                 <th className="px-2 py-4 text-center italic hidden sm:table-cell">L</th>
+                                 <th className="px-2 py-4 text-center italic">PCT</th>
+                                 <th className="px-2 py-4 text-center italic">HOME</th>
+                                 <th className="px-2 py-4 text-center italic">AWAY</th>
+                                 <th className="px-3 sm:px-4 py-4 text-right italic">STRK</th>
                               </tr>
                            </thead>
                            <tbody>
-                              {leaderboard.map((p, i) => (
-                                <tr key={p.id} className="border-b border-white/[0.02] hover:bg-white/[0.04] transition-all group">
-                                   <td className="px-3 sm:px-6 py-4 sm:py-6 flex items-center gap-2 sm:gap-4 overflow-hidden">
-                                      <span className="text-slate-700 font-black italic text-xs sm:text-sm">#{i+1}</span>
-                                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden bg-slate-950 border border-white/10 shrink-0">{p.avatarUrl && <img src={p.avatarUrl} className="w-full h-full object-cover"/>}</div>
-                                      <div className="flex flex-col min-w-0 flex-1">
-                                         <span className="text-[11px] sm:text-[13px] font-black text-white uppercase truncate block w-full">{p.name || "UNNAMED"}</span>
-                                         <span className="text-[7px] sm:text-[8px] font-black text-slate-600 truncate block w-full">{p.teamName || "ROOKIE"}</span>
-                                      </div>
-                                   </td>
-                                   <td className="px-2 sm:px-4 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-slate-500 italic">{p.wins}-{p.matchesPlayed-p.wins}</td>
-                                   <td className={`px-3 sm:px-6 py-4 sm:py-6 text-right text-[12px] sm:text-[14px] font-black italic ${p.pointsScored-p.pointsAllowed>=0?'text-green-500':'text-red-500'}`}>{p.pointsScored-p.pointsAllowed>0?'+':''}{p.pointsScored-p.pointsAllowed}</td>
-                              </tr>
-                            ))}
+                              {leaderboard.map((p, i) => {
+                                 const pm = matches.filter(m => m.playerAId === p.id || m.playerBId === p.id);
+                                 const hw = pm.filter(m => m.playerAId === p.id && m.winnerId === p.id).length;
+                                 const hl = pm.filter(m => m.playerAId === p.id && m.winnerId !== p.id).length;
+                                 const aw = pm.filter(m => m.playerBId === p.id && m.winnerId === p.id).length;
+                                 const al = pm.filter(m => m.playerBId === p.id && m.winnerId !== p.id).length;
+                                 const pct = p.matchesPlayed > 0 ? (p.wins / p.matchesPlayed).toFixed(3).replace(/^0\./, '.') : '.000';
+                                 const strk = streaks[p.id] || '-';
+                                 return (
+                                  <tr key={p.id} className="border-b border-white/[0.02] hover:bg-white/[0.04] transition-all group">
+                                     <td className="px-3 sm:px-6 py-4 sm:py-6 flex items-center gap-2 sm:gap-4 overflow-hidden">
+                                        <span className="text-slate-700 font-black italic text-[10px] sm:text-[12px] w-4">#{i+1}</span>
+                                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden bg-slate-950 border border-white/10 shrink-0">{p.avatarUrl ? <img src={p.avatarUrl} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-slate-900 flex items-center justify-center text-sm font-black text-slate-800">{p.name[0]}</div>}</div>
+                                        <div className="flex flex-col min-w-0 flex-1">
+                                           <span className="text-[11px] sm:text-[13px] font-black text-white uppercase truncate block w-full leading-none">{p.teamName || "ROOKIE"}</span>
+                                           <span className="text-[7px] sm:text-[8px] font-black text-slate-600 truncate block w-full mt-1">{p.name}</span>
+                                        </div>
+                                     </td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-white italic hidden sm:table-cell">{p.wins}</td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-slate-500 italic hidden sm:table-cell">{p.matchesPlayed-p.wins}</td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[11px] sm:text-[13px] font-black text-white italic">{pct}</td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-slate-400 italic">{hw}-{hl}</td>
+                                     <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-slate-400 italic">{aw}-{al}</td>
+                                     <td className={`px-3 sm:px-4 py-4 sm:py-6 text-right text-[10px] sm:text-[12px] font-black italic ${strk.startsWith('W')?'text-green-500':'text-red-500'}`}>{strk}</td>
+                                  </tr>
+                                 );
+                               })}
                          </tbody>
                       </table>
                       </div>
