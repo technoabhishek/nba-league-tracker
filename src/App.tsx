@@ -167,7 +167,8 @@ export default function App() {
       id: p.id, name: p.name, teamName: p.team_name, avatarUrl: p.avatar_url,
       matchesPlayed: p.matches_played || 0, wins: p.wins || 0, pointsScored: p.points_scored || 0,
       pointsAllowed: p.points_allowed || 0, status: p.status as PlayerStatus, 
-      joinedAt: new Date(p.created_at || Date.now()).getTime(), isApproved: !!p.is_approved
+      joinedAt: new Date(p.created_at || Date.now()).getTime(), isApproved: !!p.is_approved,
+      homeGamesPlayed: p.home_games_played || 0
     })));
     const { data: mData } = await supabase.from('matches').select('*').order('created_at', { ascending: false });
     if (mData) setMatches(mData.map(m => ({
@@ -212,7 +213,7 @@ export default function App() {
       if (!error) {
         const pA = activeMatch[0]; const pB = activeMatch[1];
         await Promise.all([
-          supabase.from('players').update({ wins: pA.wins + (winnerId === pA.id ? 1 : 0), matches_played: pA.matchesPlayed+1, points_scored: pA.pointsScored + sA, points_allowed: pA.pointsAllowed + sB, status: 'idle' }).eq('id', pA.id),
+          supabase.from('players').update({ wins: pA.wins + (winnerId === pA.id ? 1 : 0), matches_played: pA.matchesPlayed+1, home_games_played: pA.homeGamesPlayed+1, points_scored: pA.pointsScored + sA, points_allowed: pA.pointsAllowed + sB, status: 'idle' }).eq('id', pA.id),
           supabase.from('players').update({ wins: pB.wins + (winnerId === pB.id ? 1 : 0), matches_played: pB.matchesPlayed+1, points_scored: pB.pointsScored + sB, points_allowed: pB.pointsAllowed + sA, status: 'idle' }).eq('id', pB.id)
         ]);
         setMatchResult({ scoreA: '', scoreB: '', caption: '', mediaType: 'image', momentSource: 'upload', momentFile: null, momentPreview: null, momentLink: '', showWebcam: false });
@@ -267,7 +268,13 @@ export default function App() {
   const leaderboard = useMemo(() => [...players].filter(p => p.isApproved).sort((a,b) => b.wins - a.wins || (b.pointsScored-b.pointsAllowed) - (a.pointsScored-a.pointsAllowed)), [players]);
   const activeMatch = useMemo(() => {
     const q = players.filter(p => p.isApproved && p.status === 'waiting').sort((a,b) => a.matchesPlayed - b.matchesPlayed || a.joinedAt - b.joinedAt);
-    return q.length >= 2 ? [q[0], q[1]] : null;
+    if (q.length >= 2) {
+      const p1 = q[0], p2 = q[1];
+      if (p1.homeGamesPlayed < p2.homeGamesPlayed) return [p1, p2];
+      if (p2.homeGamesPlayed < p1.homeGamesPlayed) return [p2, p1];
+      return Math.random() > 0.5 ? [p1, p2] : [p2, p1];
+    }
+    return null;
   }, [players]);
 
   const winStreaks = useMemo(() => {
@@ -385,7 +392,12 @@ export default function App() {
                                          </div>
                                          {winStreaks[activeMatch![i].id] >= 3 && <div className="absolute -top-4 -right-4 bg-yellow-500 text-black px-4 py-1 rounded-xl text-[10px] font-black shadow-2xl skew-x-12 border-2 border-black">ON FIRE</div>}
                                       </div>
-                                      <div className="space-y-1 text-center w-full px-4"><h3 className="text-4xl font-black text-white uppercase italic tracking-tighter truncate leading-tight">{activeMatch![i].name}</h3><p className={`text-[10px] font-black tracking-widest uppercase opacity-60 ${i===0?'text-neon-blue':'text-neon-purple'}`}>{activeMatch![i].teamName || "ROOKIE"}</p></div>
+                                      <div className="space-y-1 text-center w-full px-4"><h3 className="text-4xl font-black text-white uppercase italic tracking-tighter truncate leading-tight">{activeMatch![i].name}</h3>
+                                        <div className="flex justify-center items-center gap-2">
+                                          <p className={`text-[10px] font-black tracking-widest uppercase opacity-60 ${i===0?'text-neon-blue':'text-neon-purple'}`}>{activeMatch![i].teamName || "ROOKIE"}</p>
+                                          <span className={`px-2 py-[2px] rounded uppercase font-black text-[8px] tracking-widest ${i===0?'bg-white text-black':'bg-black text-white border border-white/20 shadow-inner'}`}>{i===0?'HOME':'AWAY'}</span>
+                                        </div>
+                                      </div>
                                       <input value={i===0?matchResult.scoreA:matchResult.scoreB} onChange={e => setMatchResult({...matchResult, [i===0?'scoreA':'scoreB']: e.target.value})} className={`w-28 bg-black/60 border-2 border-white/5 py-6 rounded-[28px] text-center text-4xl font-black text-white focus:border-neon-${i===0?'blue':'purple'} outline-none transition-all placeholder:text-slate-900 shadow-inner px-2`} placeholder={i===0?'P1':'P2'} />
                                    </div>
                                 ))}
@@ -627,9 +639,10 @@ export default function App() {
                               <button onClick={async () => { await supabase.from('players').delete().eq('id', p.id); await fetchData(); }} className="text-red-500 text-[10px] bg-red-500/10 px-3 py-1 rounded-md uppercase font-black tracking-widest hover:bg-red-500 hover:text-white transition-all">Expel Athlete</button>
                            </div>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                            <div><label className="text-[8px] uppercase tracking-widest text-slate-500 font-black mb-1 block">WINS</label><input type="number" defaultValue={p.wins} onBlur={async e => { await supabase.from('players').update({wins: parseInt(e.target.value)||0}).eq('id', p.id); await fetchData(); }} className="bg-black/60 text-sm font-black text-white p-3 rounded-xl border border-white/10 w-full focus:border-neon-purple outline-none" /></div>
                            <div><label className="text-[8px] uppercase tracking-widest text-slate-500 font-black mb-1 block">PLAYED</label><input type="number" defaultValue={p.matchesPlayed} onBlur={async e => { await supabase.from('players').update({matches_played: parseInt(e.target.value)||0}).eq('id', p.id); await fetchData(); }} className="bg-black/60 text-sm font-black text-white p-3 rounded-xl border border-white/10 w-full focus:border-neon-purple outline-none" /></div>
+                           <div><label className="text-[8px] uppercase tracking-widest text-slate-500 font-black mb-1 block">HOME G.</label><input type="number" defaultValue={p.homeGamesPlayed} onBlur={async e => { await supabase.from('players').update({home_games_played: parseInt(e.target.value)||0}).eq('id', p.id); await fetchData(); }} className="bg-black/60 text-sm font-black text-white p-3 rounded-xl border border-white/10 w-full focus:border-neon-purple outline-none" /></div>
                            <div><label className="text-[8px] uppercase tracking-widest text-slate-500 font-black mb-1 block">PTS+</label><input type="number" defaultValue={p.pointsScored} onBlur={async e => { await supabase.from('players').update({points_scored: parseInt(e.target.value)||0}).eq('id', p.id); await fetchData(); }} className="bg-black/60 text-sm font-black text-white p-3 rounded-xl border border-white/10 w-full focus:border-neon-blue outline-none" /></div>
                            <div><label className="text-[8px] uppercase tracking-widest text-slate-500 font-black mb-1 block">PTS-</label><input type="number" defaultValue={p.pointsAllowed} onBlur={async e => { await supabase.from('players').update({points_allowed: parseInt(e.target.value)||0}).eq('id', p.id); await fetchData(); }} className="bg-black/60 text-sm font-black text-white p-3 rounded-xl border border-white/10 w-full focus:border-neon-blue outline-none" /></div>
                         </div>

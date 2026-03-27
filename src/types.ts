@@ -12,6 +12,7 @@ export interface Player {
   status: PlayerStatus;
   joinedAt: number;
   isApproved: boolean;
+  homeGamesPlayed: number;
 }
 
 export interface Match {
