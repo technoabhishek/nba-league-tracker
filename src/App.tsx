@@ -91,6 +91,7 @@ const SatelliteCamera = ({ onCapture, type = 'image', onCancel }: { onCapture: (
   return (
     <div className="space-y-6">
        <div className="relative rounded-[32px] overflow-hidden border-2 border-white/10 shadow-2xl bg-black aspect-video group">
+          {/* @ts-ignore */}
           <Webcam audio={type === 'video'} ref={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ facingMode: "environment" }} className="w-full h-full object-cover" />
        </div>
        <div className="flex gap-3">
@@ -185,6 +186,7 @@ export default function App() {
     if (!activeMatch) return;
     const sA = parseInt(matchResult.scoreA); const sB = parseInt(matchResult.scoreB);
     if (isNaN(sA) || isNaN(sB)) return alert("Valid scores required.");
+    if (sA === sB) return alert("Matches cannot end in a tie. Please resolve overtime first.");
     setIsFinalizing(true);
     let pUrl = matchResult.momentSource === 'link' ? matchResult.momentLink : null;
     let vUrl = null;
