@@ -174,7 +174,7 @@ export default function App() {
       joinedAt: new Date(p.created_at || Date.now()).getTime(), isApproved: !!p.is_approved,
       homeGamesPlayed: p.home_games_played || 0,
       timeAtTop: p.time_at_top || 0,
-      topSince: p.top_since ? parseInt(p.top_since) : null
+      topSince: p.top_since ? Number(p.top_since) : null
     })));
     const { data: mData } = await supabase.from('matches').select('*').order('created_at', { ascending: false });
     if (mData) setMatches(mData.map(m => ({
@@ -276,12 +276,13 @@ export default function App() {
   const leaderboard = useMemo(() => [...players].filter(p => p.isApproved).sort((a,b) => b.wins - a.wins || (b.pointsScored-b.pointsAllowed) - (a.pointsScored-a.pointsAllowed)), [players]);
 
   useEffect(() => {
-    if (!isAdmin || players.length === 0 || matches.length === 0) return;
+    if (players.length === 0 || matches.length === 0) return;
     const currentTop = leaderboard[0];
     if (!currentTop) return;
     const previousTop = players.find(p => p.topSince !== null);
     
     if (previousTop && previousTop.id !== currentTop.id) {
+       if (!isAdmin) return;
        const timeSpent = Date.now() - previousTop.topSince!;
        supabase.from('players').update({ top_since: null, time_at_top: previousTop.timeAtTop + timeSpent }).eq('id', previousTop.id).then();
        supabase.from('players').update({ top_since: Date.now() }).eq('id', currentTop.id).then();
