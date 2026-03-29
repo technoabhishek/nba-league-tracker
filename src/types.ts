@@ -13,6 +13,8 @@ export interface Player {
   joinedAt: number;
   isApproved: boolean;
   homeGamesPlayed: number;
+  timeAtTop: number;
+  topSince: number | null;
 }
 
 export interface Match {

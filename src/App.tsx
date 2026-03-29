@@ -137,6 +137,7 @@ export default function App() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [resetModal, setResetModal] = useState(false);
   const [matchView, setMatchView] = useState<Match | null>(null);
+  const [nowTick, setNowTick] = useState(Date.now());
 
   const [matchResult, setMatchResult] = useState({
      scoreA: '', scoreB: '', caption: '', mediaType: 'image' as 'image' | 'video',
@@ -160,7 +161,8 @@ export default function App() {
     const handleChanges = () => { fetchData(); };
     const pSub = supabase.channel('p').on('postgres_changes', { event: '*', table: 'players', schema: 'public' }, handleChanges).subscribe();
     const mSub = supabase.channel('m').on('postgres_changes', { event: '*', table: 'matches', schema: 'public' }, handleChanges).subscribe();
-    return () => { supabase.removeChannel(pSub); supabase.removeChannel(mSub); };
+    const tickInterval = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => { supabase.removeChannel(pSub); supabase.removeChannel(mSub); clearInterval(tickInterval); };
   }, []);
 
   const fetchData = async () => {
@@ -170,7 +172,9 @@ export default function App() {
       matchesPlayed: p.matches_played || 0, wins: p.wins || 0, pointsScored: p.points_scored || 0,
       pointsAllowed: p.points_allowed || 0, status: p.status as PlayerStatus, 
       joinedAt: new Date(p.created_at || Date.now()).getTime(), isApproved: !!p.is_approved,
-      homeGamesPlayed: p.home_games_played || 0
+      homeGamesPlayed: p.home_games_played || 0,
+      timeAtTop: p.time_at_top || 0,
+      topSince: p.top_since ? parseInt(p.top_since) : null
     })));
     const { data: mData } = await supabase.from('matches').select('*').order('created_at', { ascending: false });
     if (mData) setMatches(mData.map(m => ({
@@ -270,6 +274,21 @@ export default function App() {
   };
 
   const leaderboard = useMemo(() => [...players].filter(p => p.isApproved).sort((a,b) => b.wins - a.wins || (b.pointsScored-b.pointsAllowed) - (a.pointsScored-a.pointsAllowed)), [players]);
+
+  useEffect(() => {
+    if (!isAdmin || players.length === 0 || matches.length === 0) return;
+    const currentTop = leaderboard[0];
+    if (!currentTop) return;
+    const previousTop = players.find(p => p.topSince !== null);
+    
+    if (previousTop && previousTop.id !== currentTop.id) {
+       const timeSpent = Date.now() - previousTop.topSince!;
+       supabase.from('players').update({ top_since: null, time_at_top: previousTop.timeAtTop + timeSpent }).eq('id', previousTop.id).then();
+       supabase.from('players').update({ top_since: Date.now() }).eq('id', currentTop.id).then();
+    } else if (!previousTop) {
+       supabase.from('players').update({ top_since: Date.now() }).eq('id', currentTop.id).then();
+    }
+  }, [leaderboard, isAdmin]);
   const activeMatch = useMemo(() => {
     const q = players.filter(p => p.isApproved && p.status === 'waiting').sort((a,b) => a.matchesPlayed - b.matchesPlayed || a.joinedAt - b.joinedAt);
     if (q.length >= 2) {
@@ -523,6 +542,7 @@ export default function App() {
                                  <th className="px-2 py-4 text-center italic text-green-500/50" title="Total Points For">PF</th>
                                  <th className="px-2 py-4 text-center italic text-red-500/50" title="Total Points Against">PA</th>
                                  <th className="px-2 py-4 text-center italic text-yellow-500/50" title="Net Point Differential">DIFF</th>
+                                 <th className="px-3 sm:px-4 py-4 text-center italic text-yellow-300">CROWN TIME</th>
                                  <th className="px-3 sm:px-4 py-4 text-right italic">STRK</th>
                               </tr>
                            </thead>
@@ -540,6 +560,15 @@ export default function App() {
                                  const diff = p.pointsScored - p.pointsAllowed;
                                  const pct = p.matchesPlayed > 0 ? (p.wins / p.matchesPlayed).toFixed(3).replace(/^0\./, '.') : '.000';
                                  const strk = streaks[p.id] || '-';
+                                 const totalTopMs = p.timeAtTop + (p.topSince ? nowTick - p.topSince : 0);
+                                 const formatTime = (ms: number) => {
+                                    if (ms === 0) return '-';
+                                    const d = Math.floor(ms / 86400000);
+                                    const h = Math.floor((ms % 86400000) / 3600000);
+                                    const m = Math.floor((ms % 3600000) / 60000);
+                                    const s = Math.floor((ms % 60000) / 1000);
+                                    return `${d>0?d+'d ':''}${h>0?h+'h ':''}${m>0?m+'m ':''}${s}s`;
+                                 };
                                  return (
                                   <tr key={p.id} className="border-b border-white/[0.02] hover:bg-white/[0.04] transition-all group">
                                      <td className="px-3 sm:px-6 py-4 sm:py-6 flex items-center gap-2 sm:gap-4 overflow-hidden sticky left-0 bg-slate-900/95 backdrop-blur-md z-10 shadow-[4px_0_12px_rgba(0,0,0,0.5)]">
@@ -562,6 +591,7 @@ export default function App() {
                                      <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-green-500/80 italic bg-white/[0.01]">{p.pointsScored}</td>
                                      <td className="px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black text-red-500/80 italic bg-white/[0.01]">{p.pointsAllowed}</td>
                                      <td className={`px-2 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black italic bg-white/[0.01] ${diff > 0 ? 'text-green-500' : diff < 0 ? 'text-red-500' : 'text-slate-500'}`}>{diff > 0 ? '+' : ''}{diff}</td>
+                                     <td className={`px-3 sm:px-4 py-4 sm:py-6 text-center text-[10px] sm:text-[12px] font-black tracking-widest ${i===0?'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]':'text-slate-500'}`}>{formatTime(totalTopMs)}</td>
                                      <td className={`px-3 sm:px-4 py-4 sm:py-6 text-right text-[10px] sm:text-[12px] font-black italic ${strk.startsWith('W')?'text-green-500':'text-red-500'}`}>{strk}</td>
                                   </tr>
                                  );
